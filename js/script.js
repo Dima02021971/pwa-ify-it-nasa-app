@@ -1,113 +1,247 @@
-// Find our date picker inputs on the page
+
 const startInput = document.getElementById('startDate');
 const endInput = document.getElementById('endDate');
 const fetchBtn = document.getElementById('getImagesBtn');
 const gallery = document.getElementById('gallery');
 
-// Call the setupDateInputs function from dateRange.js
-// This sets up the date pickers to:
-// - Default to a range of 9 days (from 9 days ago to today)
-// - Restrict dates to NASA's image archive (starting from 1995)
+const modal = document.getElementById('modal');
+const modalBody = document.getElementById('modal-body');
+const modalClose = document.getElementById('modal-close');
+
+// Set up the existing date pickers
 setupDateInputs(startInput, endInput);
 
-// Swap in your own key from api.nasa.gov — DEMO_KEY is heavily rate-limited
-const API_KEY = 'DEMO_KEY';
-const BASE_URL = 'https://api.nasa.gov/planetary/apod';
+// NASA's new APOD Basic API
+const BASE_URL =
+  'https://science.nasa.gov/wp-json/wp/v2/apod-basic';
 
+// Convert YYYY-MM-DD into YYMMDD
+function convertDate(date) {
+  return date.slice(2).replaceAll('-', '');
+}
+
+// Check that a URL is safe to use
+function safeUrl(value) {
+  try {
+    const url = new URL(value);
+    return ['https:', 'http:'].includes(url.protocol)
+      ? url.href
+      : '';
+  } catch {
+    return '';
+  }
+}
+
+// Get a usable image URL
+function getImageUrl(item) {
+  return safeUrl(item.hdurl || '');
+}
+
+// Convert NASA's HTML explanation into plain text
+function cleanExplanation(html) {
+  const doc = new DOMParser().parseFromString(
+    html || '',
+    'text/html'
+  );
+  return doc.body.textContent.trim();
+}
+
+// Fetch images when the button is clicked
 fetchBtn.addEventListener('click', () => {
   const startDate = startInput.value;
   const endDate = endInput.value;
 
   if (!startDate || !endDate) {
-    renderMessage('Pick both a start and end date first!');
+    renderMessage('Please select both dates.');
+    return;
+  }
+
+  const start = new Date(startDate + 'T12:00:00');
+  const end = new Date(endDate + 'T12:00:00');
+
+  const days = Math.round(
+    (end - start) / 86400000
+  ) + 1;
+
+  if (days !== 9) {
+    renderMessage(
+      'Please select exactly 9 consecutive days.'
+    );
     return;
   }
 
   fetchApodRange(startDate, endDate);
 });
 
+// Request data from NASA
 async function fetchApodRange(startDate, endDate) {
-  renderMessage('🔄 Loading space photos…');
+  renderMessage('🚀 Loading NASA space images...');
+  fetchBtn.disabled = true;
 
   try {
-    const url = `${BASE_URL}?api_key=${API_KEY}&start_date=${startDate}&end_date=${endDate}`;
+    const startCode = convertDate(startDate);
+    const endCode = convertDate(endDate);
+
+    const url =
+      `${BASE_URL}?date_from=${startCode}` +
+      `&date_to=${endCode}&per_page=9`;
+
     const response = await fetch(url);
 
     if (!response.ok) {
-      throw new Error(`NASA API responded with ${response.status}`);
+      throw new Error(
+        `NASA API error: ${response.status}`
+      );
     }
 
     const data = await response.json();
 
-    // The range endpoint returns oldest-first — flip it so the newest shows up first
-    const sorted = data.sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (!Array.isArray(data)) {
+      throw new Error('Unexpected NASA API response');
+    }
+
+    const sorted = data.sort(
+      (a, b) => b.date.localeCompare(a.date)
+    );
+
     renderGallery(sorted);
-  } catch (err) {
-    console.error('Failed to fetch APOD range:', err);
-    renderMessage("Something went wrong reaching NASA's servers. Try again in a moment.");
+
+  } catch (error) {
+    console.error('NASA API error:', error);
+
+    renderMessage(
+      'Unable to load NASA images. Please try again.'
+    );
+  } finally {
+    fetchBtn.disabled = false;
   }
 }
 
+// Display gallery cards
 function renderGallery(items) {
-  gallery.innerHTML = '';
+  gallery.replaceChildren();
 
   if (items.length === 0) {
-    renderMessage('No images found for that date range.');
+    renderMessage('No astronomy images found.');
     return;
   }
 
-  items.forEach((item) => {
+  items.forEach(item => {
     const card = document.createElement('div');
     card.className = 'gallery-item';
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
 
-    // NOTE: video-entry handling below is one of the optional 25-pt LevelUp
-    // extra-credit items in the base project, not guaranteed base functionality.
-    // Some students' real code may not have this — adjust to match if needed.
-    const mediaHTML =
-      item.media_type === 'image'
-        ? `<img src="${item.url}" alt="${item.title}" />`
-        : `<div class="video-placeholder">🎬 Video — click to watch</div>`;
+    const imageUrl = getImageUrl(item);
 
-    card.innerHTML = `
-      ${mediaHTML}
-      <p><strong>${item.title}</strong><br>${item.date}</p>
-    `;
+    if (item.media_type === 'image' && imageUrl) {
+      const img = document.createElement('img');
+      img.src = imageUrl;
+      img.alt = item.title || 'NASA astronomy image';
+      img.loading = 'lazy';
+      card.appendChild(img);
+    } else {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'video-placeholder';
+      placeholder.textContent =
+        item.media_type === 'image'
+          ? '🌌 Image unavailable'
+          : '🎬 View space media';
+      card.appendChild(placeholder);
+    }
+
+    const details = document.createElement('p');
+    const title = document.createElement('strong');
+
+    title.textContent = item.title || 'NASA Astronomy';
+    details.appendChild(title);
+    details.appendChild(document.createElement('br'));
+    details.appendChild(
+      document.createTextNode(item.date || '')
+    );
+
+    card.appendChild(details);
 
     card.addEventListener('click', () => openModal(item));
+
+    card.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openModal(item);
+      }
+    });
+
     gallery.appendChild(card);
   });
 }
 
+// Display loading and error messages
 function renderMessage(message) {
-  gallery.innerHTML = `
-    <div class="placeholder">
-      <div class="placeholder-icon">🔭</div>
-      <p>${message}</p>
-    </div>
-  `;
+  gallery.replaceChildren();
+
+  const placeholder = document.createElement('div');
+  placeholder.className = 'placeholder';
+
+  const icon = document.createElement('div');
+  icon.className = 'placeholder-icon';
+  icon.textContent = '🔭';
+
+  const text = document.createElement('p');
+  text.textContent = message;
+
+  placeholder.append(icon, text);
+  gallery.appendChild(placeholder);
 }
 
-// ---- Modal ----
-const modal = document.getElementById('modal');
-const modalBody = document.getElementById('modal-body');
-const modalClose = document.getElementById('modal-close');
-
+// Open full-size image modal
 function openModal(item) {
-  const mediaHTML =
-    item.media_type === 'image'
-      ? `<img src="${item.hdurl || item.url}" alt="${item.title}" />`
-      : `<iframe src="${item.url}" allowfullscreen title="${item.title}"></iframe>`;
+  modalBody.replaceChildren();
 
-  modalBody.innerHTML = `
-    ${mediaHTML}
-    <h2>${item.title}</h2>
-    <p class="modal-date">${item.date}</p>
-    <p>${item.explanation}</p>
-  `;
+  const imageUrl = getImageUrl(item);
+
+  if (item.media_type === 'image' && imageUrl) {
+    const img = document.createElement('img');
+    img.src = imageUrl;
+    img.alt = item.title || 'NASA image';
+    modalBody.appendChild(img);
+  } else {
+    const link = document.createElement('a');
+    link.href = safeUrl(item.permalink || item.url) || '#';
+    link.textContent = 'View this entry on NASA';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    modalBody.appendChild(link);
+  }
+
+  const heading = document.createElement('h2');
+  heading.textContent = item.title || 'NASA Astronomy';
+
+  const date = document.createElement('p');
+  date.className = 'modal-date';
+  date.textContent = item.date || '';
+
+  const explanation = document.createElement('p');
+  explanation.textContent =
+    cleanExplanation(item.explanation);
+
+  modalBody.append(heading, date, explanation);
+
   modal.classList.remove('hidden');
 }
 
-modalClose.addEventListener('click', () => modal.classList.add('hidden'));
-modal.addEventListener('click', (e) => {
-  if (e.target === modal) modal.classList.add('hidden');
+// Close modal
+modalClose.addEventListener('click', () => {
+  modal.classList.add('hidden');
+});
+
+modal.addEventListener('click', event => {
+  if (event.target === modal) {
+    modal.classList.add('hidden');
+  }
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    modal.classList.add('hidden');
+  }
 });
