@@ -4,9 +4,9 @@
   "short_name": "NASA Explorer",
   "description": "Explore NASA's Astronomy Picture of the Day",
  
-"id": "/",
-"start_url": "/",
-"scope": "/",
+"id": "/pwa-ify-it-nasa-app/",
+"start_url": "/pwa-ify-it-nasa-app/",
+"scope": "/pwa-ify-it-nasa-app/",
 
   "display": "standalone",
   "background_color": "#0b1026",
