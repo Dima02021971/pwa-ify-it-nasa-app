@@ -267,3 +267,43 @@ if ("serviceWorker" in navigator) {
       });
   });
 }
+
+
+
+// NASA PWA — Custom Install Prompt
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+
+  const installBanner = document.getElementById('install-banner');
+
+  if (installBanner) {
+    installBanner.hidden = false;
+  }
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+
+  const installBanner = document.getElementById('install-banner');
+
+  if (installBanner) {
+    installBanner.hidden = true;
+  }
+});
+
+const installButton = document.getElementById('install-button');
+
+if (installButton) {
+  installButton.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) return;
+
+    await deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+
+    deferredInstallPrompt = null;
+    document.getElementById('install-banner').hidden = true;
+  });
+}
