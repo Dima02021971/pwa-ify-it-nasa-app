@@ -307,3 +307,46 @@ if (installButton) {
     document.getElementById('install-banner').hidden = true;
   });
 }
+
+// NASA PWA — Notification Permission
+const notificationButton =
+  document.getElementById('enable-notifications');
+
+const notificationStatus =
+  document.getElementById('notification-status');
+
+if (notificationButton && notificationStatus) {
+  if (!('Notification' in window)) {
+    notificationButton.disabled = true;
+    notificationStatus.textContent =
+      'Notifications are not supported in this browser.';
+  } else {
+    notificationStatus.textContent =
+      `Notification permission: ${Notification.permission}`;
+
+    notificationButton.addEventListener('click', async () => {
+      try {
+        const permission = await Notification.requestPermission();
+
+        notificationStatus.textContent =
+          `Notification permission: ${permission}`;
+
+        if (permission === 'granted') {
+          notificationButton.textContent =
+            '🔔 Notifications Enabled';
+          notificationButton.disabled = true;
+        }
+      } catch (error) {
+        console.error('Notification error:', error);
+        notificationStatus.textContent =
+          'Unable to request notification permission.';
+      }
+    });
+
+    if (Notification.permission === 'granted') {
+      notificationButton.textContent =
+        '🔔 Notifications Enabled';
+      notificationButton.disabled = true;
+    }
+  }
+}
